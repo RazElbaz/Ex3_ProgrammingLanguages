@@ -1,4 +1,4 @@
-#lang pl
+#lang pl 
 ;;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #|
 Task 2. Expanding the FLANG BNF language :
@@ -73,15 +73,15 @@ Time: 40 minutes
  ['True (Bool true)]
  ['False (Bool false)]       
  [(list 'call fun arg) (Call (parse-sexpr fun) (parse-sexpr arg))]
- [(list '= lhs rhs) (Equal (parse-sexpr lhs)(parse-sexpr rhs))]
- [(list '> lhs rhs) (Bigger (parse-sexpr lhs)(parse-sexpr rhs))]
- [(list '< lhs rhs) (Smaller (parse-sexpr lhs)(parse-sexpr rhs))]
+ [(list '= l r) (Equal (parse-sexpr l) (parse-sexpr r))]
+ [(list '> l r) (Bigger (parse-sexpr l) (parse-sexpr r))]
+ [(list '< l r) (Smaller (parse-sexpr l) (parse-sexpr r))]
  [(list 'not exp) (Not (parse-sexpr exp))]
  [(cons 'if more)
  (match sexpr    ;;Match is used for built-in types in Racket 
        [(list 'if cond (list (symbol: then-do) T-body) (list (symbol: else-do) E-body)) ;; We used Said's code from lectures
        (If (parse-sexpr cond)  (parse-sexpr T-body) (parse-sexpr E-body))]
-       [else (error 'parse-sexpr "bad if syntax!!")])]  
+       [else (error 'parse-sexpr "bad `if' syntax in ~s" sexpr)])]  
  
 
  ;; We used the code from the lectures
@@ -91,16 +91,16 @@ Time: 40 minutes
           [(list 'with (list (symbol: name) named-expr) body)
                                  (With name (parse-sexpr named-expr)
                                              (parse-sexpr body))]
-             [else (error 'parse-sexpr "bad with syntax!!")])]
+             [else (error 'parse-sexpr "bad `with' syntax in ~s" sexpr)])]
  [(cons 'fun more)
           ( match sexpr
           [(list 'fun (list (symbol: name)) body)
                                  (Fun name (parse-sexpr body))]
-             [else (error 'parse-sexpr "bad fun syntax!!")])]
+             [else (error 'parse-sexpr "bad `fun' syntax in ~s" sexpr)])]
  [(list '+ l r) (Add (parse-sexpr l) (parse-sexpr r))]
-          [(list '- l r) (Sub (parse-sexpr l) (parse-sexpr r))]
-          [(list '* l r) (Mul (parse-sexpr l) (parse-sexpr r))]
-          [(list '/ l r) (Div (parse-sexpr l) (parse-sexpr r))]
+ [(list '- l r) (Sub (parse-sexpr l) (parse-sexpr r))]
+ [(list '* l r) (Mul (parse-sexpr l)  (parse-sexpr r))]
+ [(list '/ l r) (Div (parse-sexpr l) (parse-sexpr r))]
 [else (error 'parse-sexpr "bad syntax in ~s" sexpr)]))
 ;;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #|
@@ -119,7 +119,7 @@ Problems we encountered:-We had to refresh our memory regarding the grammar writ
   therefore we had to add them wherever it was needed and we used the codes from the lectures
                         
 * We used the code from the lectures
-Time: 3 hours
+Time: 4 hours
 
 
 
@@ -214,8 +214,8 @@ subst:
 ;; since it's used in more than one place.
 (define (flang->bool e)
  (cases e
- [(Bool boolean) boolean]
- [else (error 'flang->bool "expects a boolean, got: ~s" e)]))
+ [(Bool boolean)(if boolean #t #f)]
+ [else #t]))
 
 ;;TEST - flang->bool
 (test (flang->bool (Bool true))=> #t)
@@ -263,12 +263,12 @@ part of the mission.
  [(Sub l r) (arith-op - (eval l) (eval r))]
  [(Mul l r) (arith-op * (eval l) (eval r))]
  [(Div l r) (arith-op / (eval l) (eval r))]
- [(Id name) (error 'eval "free identifier ~s" name)]
+ [(Id name) (error 'eval "free identifier: ~s" name)]
  [(Fun name body) expr]
  [(Call fun-expr arg-expr)
      (let([fval (eval fun-expr)])
        (cases fval
-         [(Fun bound-id bound-body)
+ [(Fun bound-id bound-body)
           (eval (subst bound-body
                        bound-id
                        (eval arg-expr)))]
@@ -281,9 +281,209 @@ part of the mission.
  [(Equal l r) (logic-op = (eval l) (eval r))]
  ;;We used Said's code from lecture 10
  [(If l m r)
-    (let ([cond (eval l)])
-    (cases cond
-        [(Bool boolean) (if (eq? boolean #t) (eval m) (eval r))]
-        [else (error 'eval "expected a boolean, got: ~s" cond)]))]
+   (let ([cond (flang->bool (eval l))])
+         (if (eq? cond true) (eval m) (eval r)))]
  [(Not exp) (Bool (not (flang->bool (eval exp))))]))
 
+;;--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#|
+Task 5. Extending the run procedure  :
+
+Finally, we will allow the interface procedure to return any of the three possible types of the extended language.
+We used the test examples to complete the code for the run procedure
+
+Problems we encountered:We got the error:
+  parse: unbound identifier in: parse
+
+Then we accessed the code that Said uploaded: Twoards_FLANG .rkt and took the parse function from there
+Time: 1 hours
+
+|#
+
+
+;; from Twoards_FLANG .rkt
+(: parse : String -> FLANG)
+(define (parse code)
+       (parse-sexpr (string->sexpr code)))
+
+(: run : String -> (U Number Boolean FLANG))
+;; evaluate a FLANG program contained in a string
+(define (run str)
+  (let ([result (eval (parse str))])
+    (cases result
+      [(Num n) n]
+      [(Bool b) b]
+      [else result])))
+
+
+
+;; tests
+(test (run "True") => true)
+(test (run "{not True}") => false)
+(test (run "{> 3 44}") => false)
+(test (run "{if {- 3 3} {then-do 4} {else-do 5}}") => 4)
+(test (run "{with {x 8}
+ {if {> x 0} {then-do {/ 2 x}} {else-do x}}}") => 1/4)
+(test (run "{with {x 0}
+ {if {> x 0} {then-do {/ 2 x}} {else-do x}}}") => 0)
+(test (run "{if {> 2 1} {then-do True} {else-do {+ 2 2}}}") => true)
+(test (run "{with {c True}
+ {if c {then-do {> 2 1}} {else-do 2}}}")
+ => true)
+(test (run "{with {foo {fun {x}
+ {if {< x 2} {then-do x} {else-do {/ x 2}}}}} foo}")
+ => (Fun 'x (If (Smaller (Id 'x) (Num 2)) (Id 'x) (Div (Id 'x) (Num 2)))))
+(test (run "{with {x 0}
+ {if {> x 0} {/ 2 x} x}}")
+ =error> "parse-sexpr: bad `if' syntax in (if (> x 0) (/ 2 x) x)")
+ (test (run "true") =error> "eval: free identifier: true")
+(test (run "{< false 5}") =error> "eval: free identifier: false")
+(test (run "{< False 5}")
+ =error> "Num->number: expected a number, got: #(struct:Bool #f)")
+
+;;TEST-constructors
+(test (Add (Num 1) (Num 1)) => (Add (Num 1) (Num 1)))
+(test (Sub   (Num 1) (Num 1)) => (Sub   (Num 1) (Num 1)))
+(test (Mul (Num 1) (Num 1)) => (Mul (Num 1) (Num 1)))
+(test (Div (Num 1) (Num 1)) => (Div (Num 1) (Num 1)))
+(test (Id 'eval) => (Id 'eval))
+(test (With 'razgal100 (Num 1) (Num 1)) => (With 'razgal100 (Num 1) (Num 1)))
+(test (Fun  'razgal100 (Num 1)) => (Fun 'razgal100 (Num 1)))
+(test (Call (Num 1) (Num 1)) => (Call (Num 1) (Num 1)))
+(test (Bigger (Num 2) (Num 1)) => (Bigger (Num 2) (Num 1)))
+(test (Smaller (Num 2) (Num 1)) => (Smaller (Num 2) (Num 1)))
+(test (Equal (Num 1) (Num 1)) => (Equal (Num 1) (Num 1)))
+(test (Not (Bool  #t)) => (Not (Bool  #t)))
+(test (If (Bool #t) (Bool #t) (Bool #t)) => (If (Bool #t) (Bool #t) (Bool #t)))
+
+;;TEST-parse-sexpr
+(test (parse-sexpr "1") =error>  "parse-sexpr: bad syntax in")
+(test (parse-sexpr "100") =error>  "parse-sexpr: bad syntax in")
+(test (parse-sexpr 1) =>  (Num 1))
+(test (parse-sexpr 'True) =>  (Bool true))
+(test (parse-sexpr 'False) =>  (Bool false))
+(test (parse-sexpr 'eval) =>  (Id 'eval))
+(test (parse-sexpr {+ 1 2}) =>   (Num 3))
+(test (parse-sexpr {- 1 1}) =>   (Num 0))
+(test (parse-sexpr {* 1 2}) =>   (Num 2))
+(test (parse-sexpr {/ 1 1}) =>   (Num 1))
+(test (parse-sexpr (list '= 1 2) )=> (Equal (Num 1) (Num 2)))
+(test (parse-sexpr (list '< 1 2)) =>   (Smaller (Num 1) (Num 2)))
+
+;;TEST-parse
+(test (parse "1") =>  (Num 1))
+(test (parse "{+ 1 2}") =>  (Add (Num 1) (Num 2)))
+(test (parse "{- 1 2}") =>  (Sub (Num 1) (Num 2)))
+(test (parse "{* 1 2}") =>  (Mul (Num 1) (Num 2)))
+(test (parse "{/ 1 2}") =>  (Div (Num 1) (Num 2)))
+
+;;TEST-parse-from lecture
+(test (parse "4") => (Num 4))
+(test (parse "{+ 3 5}") => (Add (Num 3) (Num 5)))
+(test (parse "{+ 3 {- 8 {+ 2 1}}}") => (Add (Num 3) (Sub (Num 8) (Add (Num 2) (Num 1)))))
+(test (parse "{+ 1 2 3}") =error> "bad syntax")
+
+(test (parse "{with {x {+ 4 2}} {* x x}}") => (With 'x (Add (Num 4) (Num 2))
+                                              (Mul (Id 'x) (Id 'x))))
+
+(test (parse "{fun {x} x}") => (Fun 'x (Id 'x)))
+(test (parse "{fun {x} {/ x 5}}") => (Fun 'x (Div (Id 'x) (Num 5))))
+(test (parse "{call {fun {x} {/ x 5}} 8}") => (Call {Fun 'x (Div (Id 'x) (Num 5))} (Num 8)))
+(test (parse "{with {sqr {fun {x} {* x x}}}
+                                    {+ {call sqr 5}
+                                        {call sqr 6}}}") =>
+                 (With 'sqr (Fun 'x (Mul (Id 'x) (Id 'x)))
+                       (Add (Call (Id 'sqr) (Num 5))
+                            (Call (Id 'sqr) (Num 6)))))
+(test (parse "{fun x {* x x}}")=error> "bad `fun' syntax in ")
+
+
+;;TEST-subst-from lecture
+(test (subst (Mul (Id 'x) (Id 'x)); ==> e
+       'x ;==> i
+       (Num 6) ;==> v
+       ) => (Mul (Num 6) (Num 6)))
+
+
+(test (subst (Id 'x)
+             'x
+             (Num 8)) => (Num 8))
+
+(test (subst (Id 'y)
+             'x
+             (Num 8)) => (Id 'y))
+(test (subst (With 'x (Num 3)
+                   (Id 'x))
+             'x
+             (Num 5)) => (With 'x (Num 3)
+                   (Id 'x)))
+(test (subst (With 'y
+                   (Add (Id 'x) (Num 3))
+                   (Add (Id 'x) (Num 5)))
+             'x
+             (Num 4)) => (With 'y
+                               (Add (Num 4) (Num 3))
+                               (Add (Num 4) (Num 5))))
+
+(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))
+             'x
+             (Num 4)) => (Fun 'x (Add (Id 'x) (Id 'y))))
+
+(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))
+             'y
+             (Num 4)) => (Fun 'x (Add (Id 'x) (Num 4))))
+(test (subst (Call (Fun 'x (Div (Id 'x) (Id 'y)))
+                   (Add (Id 'x) (Id 'y)))
+                   'x
+                   (Num 3)) => (Call (Fun 'x (Div (Id 'x) (Id 'y)))
+                   (Add (Num 3) (Id 'y))))
+
+(test (subst (Call (Fun 'x (Div (Id 'x) (Id 'y)))
+                   (Add (Id 'x) (Id 'y)))
+                   'y
+                   (Num 3)) => (Call (Fun 'x (Div (Id 'x) (Num 3)))
+                   (Add (Id 'x) (Num 3))))
+
+;;TEST - flang->bool
+(test (flang->bool (Bool true))=> true)
+(test (flang->bool (Bool false))=> false)
+(test (flang->bool (eval (parse "{> 2 2}")))=> false)
+(test (flang->bool (eval (Smaller (Num 1) (Num 1)) ))=> false)
+(test (flang->bool (eval (Equal (Num 1) (Num 1)) ))=> true)
+(test (flang->bool (eval (Equal (Num 1) (Num 2)) ))=> false)
+(test (flang->bool (eval (Bigger (Num 1) (Num 2)) ))=> false)
+
+;;TEST - Num->number
+(test (Num->number (Num 4))=> 4)
+(test (Num->number (Num 123))=> 123)
+(test (Num->number (Bool true)) =error> "Num->number: expected a number, got: ")
+(test (Num->number (Bool true))=error>  "Num->number: expected a number, got: ")
+
+;;TEST -logic-op
+(test (logic-op = (Num 2) (Num 1)) => (Bool false))
+(test (logic-op = (Num 1) (Num 1)) => (Bool true))
+
+;;TEST -arith-op
+(test (arith-op + (Num 1) (Num 1)) => (Num 2))
+(test (arith-op - (Num 1) (Num 1)) => (Num 0))
+(test (arith-op * (Num 1) (Num 1)) => (Num 1))
+(test (arith-op / (Num 1) (Num 1)) => (Num 1))
+
+;;TEST - eval
+(test (eval (Num 1)) => (Num 1))
+(test (eval (Num 2)) => (Num 2))
+(test (eval (Bool true)) => (Bool true))
+(test (eval (Bool false)) => (Bool false))
+(test (eval (Not(Bool false))) => (Bool true))
+(test (eval (Not(Bool true))) => (Bool false))
+(test (eval ( parse "{= 1 2}"))=> (Bool false))
+(test (eval ( parse "{= 2 2}"))=> (Bool true))
+(test (eval (Add (Num 1) (Num 1)))=> (Num 2))
+(test (eval (Mul (Num 1) (Num 1)))=> (Num 1))
+
+;;TEST - run
+(test (run "1") => 1)
+(test (run "{= 1 1}") => true)
+(test (run "{fun {eval} sqr}") => (Fun 'eval (Id 'sqr)))
+(test (run "{fun {eval} eval}") => (Fun 'eval (Id 'eval)))
+(test (run "{Fun {+ 1 1} 2}") =error> "bad syntax in ")
