@@ -359,6 +359,7 @@ Time: 1 hours
 ;;TEST-parse-sexpr
 (test (parse-sexpr "1") =error>  "parse-sexpr: bad syntax in")
 (test (parse-sexpr "100") =error>  "parse-sexpr: bad syntax in")
+(test (parse-sexpr  "{with {x {+ 4 2}} {* x x}}") =error>  "parse-sexpr: bad syntax in ")
 (test (parse-sexpr 1) =>  (Num 1))
 (test (parse-sexpr 'True) =>  (Bool true))
 (test (parse-sexpr 'False) =>  (Bool false))
@@ -399,48 +400,29 @@ Time: 1 hours
 
 
 ;;TEST-subst-from lecture
-(test (subst (Mul (Id 'x) (Id 'x)); ==> e
-       'x ;==> i
-       (Num 6) ;==> v
-       ) => (Mul (Num 6) (Num 6)))
-
-
-(test (subst (Id 'x)
-             'x
-             (Num 8)) => (Num 8))
-
-(test (subst (Id 'y)
-             'x
-             (Num 8)) => (Id 'y))
-(test (subst (With 'x (Num 3)
-                   (Id 'x))
-             'x
-             (Num 5)) => (With 'x (Num 3)
-                   (Id 'x)))
-(test (subst (With 'y
-                   (Add (Id 'x) (Num 3))
-                   (Add (Id 'x) (Num 5)))
-             'x
-             (Num 4)) => (With 'y
-                               (Add (Num 4) (Num 3))
-                               (Add (Num 4) (Num 5))))
-
-(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))
-             'x
+(test (subst (Mul (Id 'x) (Id 'x)) 'x (Num 6)) => (Mul (Num 6) (Num 6)))
+(test (subst (Sub (Id 'x) (Id 'x)) 'x (Num 6)) => (Sub (Num 6) (Num 6)))
+(test (subst (Equal (Id 'x) (Id 'x)) 'x (Num 6)) => (Equal (Num 6) (Num 6)))
+(test (subst (Smaller (Id 'x) (Id 'x)) 'x (Num 6)) => (Smaller (Num 6) (Num 6)))
+(test (subst (Bigger (Id 'x) (Id 'x)) 'x (Num 6)) => (Bigger (Num 6) (Num 6)))
+(test (subst (Not (Id 'x)) 'x (Num 8)) => (Not (Num 8)))
+(test (subst (Bool true) 'x (Id 'x)) => (Bool true))
+(test (subst (Bigger (Id 'x) (Id 'x)) 'x (Num 6)) => (Bigger (Num 6) (Num 6)))
+(test (subst (Id 'x) 'x (Num 8)) => (Num 8))
+(test (subst (Id 'y) 'x (Num 8)) => (Id 'y))
+(test (subst (With 'x (Num 3) (Id 'x)) 'x (Num 5)) => (With 'x (Num 3) (Id 'x)))
+(test (subst (With 'y (Add (Id 'x) (Num 3))(Add (Id 'x) (Num 5)))
+             'x (Num 4)) => (With 'y (Add (Num 4) (Num 3))(Add (Num 4) (Num 5))))
+(test (subst (Fun 'x (Add (Id 'x) (Id 'y))) 'x
              (Num 4)) => (Fun 'x (Add (Id 'x) (Id 'y))))
-
-(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))
-             'y
+(test (subst (Fun 'x (Add (Id 'x) (Id 'y)))  'y
              (Num 4)) => (Fun 'x (Add (Id 'x) (Num 4))))
 (test (subst (Call (Fun 'x (Div (Id 'x) (Id 'y)))
-                   (Add (Id 'x) (Id 'y)))
-                   'x
+                   (Add (Id 'x) (Id 'y))) 'x
                    (Num 3)) => (Call (Fun 'x (Div (Id 'x) (Id 'y)))
                    (Add (Num 3) (Id 'y))))
-
 (test (subst (Call (Fun 'x (Div (Id 'x) (Id 'y)))
-                   (Add (Id 'x) (Id 'y)))
-                   'y
+                   (Add (Id 'x) (Id 'y))) 'y
                    (Num 3)) => (Call (Fun 'x (Div (Id 'x) (Num 3)))
                    (Add (Id 'x) (Num 3))))
 
@@ -480,10 +462,32 @@ Time: 1 hours
 (test (eval ( parse "{= 2 2}"))=> (Bool true))
 (test (eval (Add (Num 1) (Num 1)))=> (Num 2))
 (test (eval (Mul (Num 1) (Num 1)))=> (Num 1))
+(test (eval (Call (Fun 'x (Mul (Id 'x) (Num 2)))
+            (Num 1))) => (Num 2))
+(test (eval (Call (Num 1) (Num 1))) =error> "eval: `call' expects a function, got: ")
 
 ;;TEST - run
 (test (run "1") => 1)
+(test (run "5") => 5)
+(test (run "{+ 4 6}") => 10)
+(test (run "{+ 4 6}") => 10)
 (test (run "{= 1 1}") => true)
 (test (run "{fun {eval} sqr}") => (Fun 'eval (Id 'sqr)))
 (test (run "{fun {eval} eval}") => (Fun 'eval (Id 'eval)))
 (test (run "{Fun {+ 1 1} 2}") =error> "bad syntax in ")
+(test (run "{with raz}") =error> "bad `with' syntax in (with raz)")
+(test (run "{with gal}") =error> "bad `with' syntax in (with gal)")
+(test (run "{fun {x} {+ x x} {+ y y}}") =error> "parse-sexpr: bad `fun' syntax")
+(test (run "{call {+ 1 1} 1}") =error> "eval: `call' expects a function")
+(test (run "{fun {x} {+ 1 1} {+ 1 1}}") =error> "parse-sexpr: bad `fun' syntax")
+(test (run "{not {not False}}") => false)
+(test (run "{not {not True}}") => true)
+(test (run "False") => false)
+(test (run "True") => true)
+(test (run "{with {x 3}{if {= x 3} {then-do {/ 3 x}} {else-do x}}}") => 1)
+(test (run "{with {x 4}{if {= x 4} {then-do {/ 2 x}} {else-do x}}}") => 1/2)
+(test (run "{with {x 4}{if {< x 4} {then-do {/ 2 x}} {else-do x}}}") => 4)
+(test (run "{with {x 0} {if {not {< x 1}} {then-do {* 0 x}} {else-do x}}}") => 0)
+(test (run "{with {x 0}{if {> x 0} {then-do {/ 0 x}} {else-do x}}}") => 0)
+(test (run "{with {x 125}{if {> x 0} {then-do {/ 1 x}} {else-do x}}}") => 1/125)
+(test(run "{with {x 5}{if {> x 5} {then-do {+ 5 x}} {else-do x}}}") => 5)
